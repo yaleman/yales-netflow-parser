@@ -16,7 +16,7 @@ async fn main() -> io::Result<()> {
     let opts = CliOpts::parse();
     let sock = UdpSocket::bind(format!("{}:{}", opts.bind_address, opts.port)).await?;
 
-    let mut buf = [0; 1024 * 1024];
+    let mut buf = [0; 1024 * 64]; // Adjust buffer size as needed
 
     loop {
         let (len, addr) = sock.recv_from(&mut buf).await?;
