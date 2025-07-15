@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::io;
 use tokio::net::UdpSocket;
 
-use netflow_parser::{NetflowPacket, NetflowParser};
+use netflow_parser::{NetflowPacket, NetflowParseError, NetflowParser};
 
 use yales_netflow_parser::{CliOpts, handle_flowset};
 
@@ -14,9 +14,9 @@ use yales_netflow_parser::{CliOpts, handle_flowset};
 async fn main() -> io::Result<()> {
     let mut parsers: BTreeMap<String, NetflowParser> = BTreeMap::new();
     let opts = CliOpts::parse();
-    let sock = UdpSocket::bind(format!("0.0.0.0:{}", opts.port)).await?;
+    let sock = UdpSocket::bind(format!("{}:{}", opts.bind_address, opts.port)).await?;
 
-    let mut buf = [0; 65535];
+    let mut buf = [0; 1024 * 1024];
 
     loop {
         let (len, addr) = sock.recv_from(&mut buf).await?;
@@ -37,17 +37,27 @@ async fn main() -> io::Result<()> {
         for packet in result {
             match packet {
                 NetflowPacket::V9(packet) => {
-                    // println!("Received NetFlow v9 packet from {}: {:?}", addr, packet);
-                    // println!("{:?}", packet.header);
                     for flowset in packet.flowsets {
-                        handle_flowset(packet.header.unix_secs.into(), &addr, flowset);
+                        handle_flowset(&opts, packet.header.unix_secs.into(), &addr, flowset);
                     }
                 }
                 NetflowPacket::Error(err) => {
-                    eprintln!("Error parsing packet from {addr}: {err:?}");
+                    match err.error {
+                        NetflowParseError::Partial(_) => {
+                            if opts.debug {
+                                eprintln!("Partial parse error from {addr}: {err:?}");
+                            }
+                        }
+                        _ => {
+                            // Handle other errors, such as unsupported versions or malformed packets
+                            eprintln!("Error parsing packet from {addr}: {err:?}");
+                        }
+                    }
                 }
                 _ => {
-                    eprintln!("Unsupported packet type received from {addr}: {packet:?}");
+                    if opts.debug {
+                        eprintln!("Unsupported packet type received from {addr}: {packet:?}");
+                    }
                 }
             }
         }

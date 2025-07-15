@@ -10,11 +10,21 @@ use std::{collections::BTreeMap, num::NonZeroU16};
 
 #[derive(clap::Parser, Debug)]
 pub struct CliOpts {
+    #[clap(short, long, default_value = "0.0.0.0")]
+    pub bind_address: String,
+
     #[clap(short, long, default_value = "2055")]
     pub port: NonZeroU16,
+    #[clap(short, long, default_value = "false")]
+    pub debug: bool,
 }
 
-pub fn handle_flowset(timestamp: u64, addr: &std::net::SocketAddr, flowset: v9::FlowSet) {
+pub fn handle_flowset(
+    cli: &CliOpts,
+    timestamp: u64,
+    addr: &std::net::SocketAddr,
+    flowset: v9::FlowSet,
+) {
     match flowset.body {
         v9::FlowSetBody::Data(records) => {
             for record in records.fields {
@@ -56,20 +66,28 @@ pub fn handle_flowset(timestamp: u64, addr: &std::net::SocketAddr, flowset: v9::
                     };
                     actual_data.insert(format!("{field_name:?}"), value);
                 }
-                println!(
-                    "{}",
-                    serde_json::to_string(&actual_data).unwrap_or(format!("{actual_data:?}"))
-                );
+                match serde_json::to_string(&actual_data) {
+                    Ok(json) => println!("{json}"),
+                    Err(err) => eprintln!(
+                        "Error serializing data from {addr}: {err:?}, data: {actual_data:?}"
+                    ),
+                }
             }
         }
         v9::FlowSetBody::OptionsTemplate(template) => {
-            eprintln!("Options Template Flowset received from {addr}: {template:?}");
+            if cli.debug {
+                eprintln!("Options Template Flowset received from {addr}: {template:?}");
+            }
         }
         v9::FlowSetBody::OptionsData(data) => {
-            eprintln!("Options Data Flowset received from {addr}: {data:?}");
+            if cli.debug {
+                eprintln!("Options Data Flowset received from {addr}: {data:?}");
+            }
         }
         v9::FlowSetBody::Template(template) => {
-            eprintln!("Template Flowset received from {addr}: template = {template:?}");
+            if cli.debug {
+                eprintln!("Template Flowset received from {addr}: template = {template:?}");
+            }
         }
     }
 }
