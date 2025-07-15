@@ -1,0 +1,55 @@
+#![deny(clippy::expect_used)]
+#![deny(clippy::unwrap_used)]
+
+use clap::Parser;
+use std::collections::BTreeMap;
+use std::io;
+use tokio::net::UdpSocket;
+
+use netflow_parser::{NetflowPacket, NetflowParser};
+
+use yales_netflow_parser::{CliOpts, handle_flowset};
+
+#[tokio::main]
+async fn main() -> io::Result<()> {
+    let mut parsers: BTreeMap<String, NetflowParser> = BTreeMap::new();
+    let opts = CliOpts::parse();
+    let sock = UdpSocket::bind(format!("0.0.0.0:{}", opts.port)).await?;
+
+    let mut buf = [0; 65535];
+
+    loop {
+        let (len, addr) = sock.recv_from(&mut buf).await?;
+
+        let data = buf[..len].to_vec();
+        let data = data.as_slice();
+
+        let result = match parsers.get_mut(&addr.to_string()) {
+            Some(parser) => parser.parse_bytes(data),
+            None => {
+                let mut new_parser = NetflowParser::default();
+                let result = new_parser.parse_bytes(data);
+                parsers.insert(addr.to_string(), new_parser);
+                result
+            }
+        };
+
+        for packet in result {
+            match packet {
+                NetflowPacket::V9(packet) => {
+                    // println!("Received NetFlow v9 packet from {}: {:?}", addr, packet);
+                    // println!("{:?}", packet.header);
+                    for flowset in packet.flowsets {
+                        handle_flowset(packet.header.unix_secs.into(), &addr, flowset);
+                    }
+                }
+                NetflowPacket::Error(err) => {
+                    eprintln!("Error parsing packet from {addr}: {err:?}");
+                }
+                _ => {
+                    eprintln!("Unsupported packet type received from {addr}: {packet:?}");
+                }
+            }
+        }
+    }
+}
