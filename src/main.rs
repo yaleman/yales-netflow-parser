@@ -22,13 +22,12 @@ async fn main() -> io::Result<()> {
         let (len, addr) = sock.recv_from(&mut buf).await?;
 
         let data = buf[..len].to_vec();
-        let data = data.as_slice();
 
         let result = match parsers.get_mut(&addr.to_string()) {
-            Some(parser) => parser.parse_bytes(data),
+            Some(parser) => parser.parse_bytes(data.as_slice()),
             None => {
                 let mut new_parser = NetflowParser::default();
-                let result = new_parser.parse_bytes(data);
+                let result = new_parser.parse_bytes(data.as_slice());
                 parsers.insert(addr.to_string(), new_parser);
                 result
             }
