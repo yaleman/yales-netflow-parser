@@ -66,12 +66,7 @@ pub fn handle_flowset(
                     };
                     actual_data.insert(format!("{field_name:?}"), value);
                 }
-                match serde_json::to_string(&actual_data) {
-                    Ok(json) => println!("{json}"),
-                    Err(err) => eprintln!(
-                        "Error serializing data from {addr}: {err:?}, data: {actual_data:?}"
-                    ),
-                }
+                println!("{}", serde_json::json!(actual_data))
             }
         }
         v9::FlowSetBody::OptionsTemplate(template) => {
