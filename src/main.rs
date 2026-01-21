@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::io;
 use tokio::net::UdpSocket;
 
-use netflow_parser::{NetflowPacket, NetflowParseError, NetflowParser};
+use netflow_parser::{NetflowPacket, NetflowParser};
 
 use yales_netflow_parser::{CliOpts, handle_flowset};
 
@@ -33,24 +33,16 @@ async fn main() -> io::Result<()> {
             }
         };
 
-        for packet in result {
+        if let Some(error) = result.error
+            && opts.debug
+        {
+            eprintln!("Error parsing packet from {addr}: {error:?}");
+        }
+        for packet in result.packets {
             match packet {
                 NetflowPacket::V9(packet) => {
                     for flowset in packet.flowsets {
                         handle_flowset(&opts, packet.header.unix_secs.into(), &addr, flowset);
-                    }
-                }
-                NetflowPacket::Error(err) => {
-                    match err.error {
-                        NetflowParseError::Partial(_) => {
-                            if opts.debug {
-                                eprintln!("Partial parse error from {addr}: {err:?}");
-                            }
-                        }
-                        _ => {
-                            // Handle other errors, such as unsupported versions or malformed packets
-                            eprintln!("Error parsing packet from {addr}: {err:?}");
-                        }
                     }
                 }
                 _ => {
